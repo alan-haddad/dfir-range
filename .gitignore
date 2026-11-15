@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+public/cyberchef/
+__pycache__/
+test-results/
+playwright-report/

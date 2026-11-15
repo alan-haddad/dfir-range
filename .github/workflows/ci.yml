@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  solvability:
+    name: Solvability and inert content (${{ matrix.seed }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [ci-fixed-alpha, ci-fixed-bravo, random-1, random-2, random-3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Pick seed
+        id: seed
+        run: |
+          if [[ "${{ matrix.seed }}" == random-* ]]; then
+            echo "value=r${{ github.run_id }}${{ github.run_attempt }}$(od -An -N4 -tx4 /dev/urandom | tr -d ' ')" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${{ matrix.seed }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Generate bundle (twice, must be identical)
+        run: |
+          npm run -s generate -- --seed "${{ steps.seed.outputs.value }}" --out out/a --zip
+          npm run -s generate -- --seed "${{ steps.seed.outputs.value }}" --out out/b --zip
+          cmp out/a.zip out/b.zip
+          diff -r out/a out/b
+      - name: Independent solver (reads the bundle only)
+        run: python3 -I tools/solver/solve.py out/a out/solved.json out/decoded
+      - name: Site checker accepts every solved answer
+        run: npm run -s check-answers -- --seed "${{ steps.seed.outputs.value }}" --answers out/solved.json
+      - name: Inert-content scan (bundle and decoded payloads)
+        run: python3 -I tools/ci/inert_scan.py out/a out/decoded
+      - name: Scanner self-test (must flag planted real indicators)
+        run: |
+          mkdir -p out/planted
+          printf 'beacon to 8.8.4.4 and https://real-company.com/x\nreply to someone@corp.net\nlogin at Google\n' > out/planted/bad.txt
+          if python3 -I tools/ci/inert_scan.py out/planted; then echo "scanner missed planted indicators"; exit 1; fi
+
+  e2e:
+    name: Build and browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Browser tests (system Chrome)
+        run: npx playwright test
+      - name: Built site has no third-party script, style or font loads
+        run: |
+          if grep -Eo '(src|href)="https?://[^"]+"' dist/index.html; then echo "external asset in index.html"; exit 1; fi
+          if grep -Eo "fetch\(['\"]https?://" dist/assets/*.js; then echo "external fetch in bundle"; exit 1; fi
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit, solvability, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Bundle an offline copy of CyberChef
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash tools/ci/fetch-cyberchef.sh dist/cyberchef
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
