@@ -25,11 +25,24 @@ ALLOWED_SUFFIXES = (".example", ".test", ".invalid")
 # Platform identifiers that real Windows telemetry contains. Removed before scanning.
 ALLOWLIST_PHRASES = [
     "http://schemas.microsoft.com/win/2004/08/events/event",
+    "http://schemas.microsoft.com/windows/2004/02/mit/task",
     "Microsoft-Windows-Sysmon",
     "Microsoft-Windows-Security-Auditing",
     "Microsoft Corporation",
     "Microsoft® Windows® Operating System",
+    "Microsoft Windows",  # Authenticode signer of Windows binaries
+    "Microsoft Office",
+    "Microsoft Graph",
+    "Microsoft Azure CLI",
+    "Office 365 Exchange Online",
+    "Office 365 SharePoint Online",
+    "Windows Azure Service Management API",
 ]
+
+# User-agent strings legitimately name browsers and carry version numbers that look like IPs.
+UA_FIELD_RE = re.compile(r'"userAgent"\s*:\s*"[^"]*"')
+# Windows registry paths contain the vendor name as a key, e.g. HKCU\Software\Microsoft\Windows.
+REGISTRY_RE = re.compile(r"Software\\+Microsoft\\+Windows", re.I)
 
 # Real top-level domains likely to appear by accident. File extensions that are
 # not TLDs (exe, dll, ps1, dat ...) are deliberately absent.
@@ -65,6 +78,8 @@ def host_ok(host: str) -> bool:
 
 def scan_text(path: Path, text: str) -> list:
     problems = []
+    text = UA_FIELD_RE.sub(" ", text)
+    text = REGISTRY_RE.sub(" ", text)
     for phrase in ALLOWLIST_PHRASES:
         text = text.replace(phrase, " ")
     for m in IP_RE.finditer(text):
@@ -97,7 +112,9 @@ def main() -> None:
     for root in roots:
         for path in sorted(p for p in root.rglob("*") if p.is_file()):
             files += 1
-            problems += scan_text(path, path.read_bytes().decode("utf-8", errors="ignore"))
+            raw = path.read_bytes()
+            text = raw.decode("utf-16", errors="ignore") if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else raw.decode("utf-8", errors="ignore")
+            problems += scan_text(path, text)
     for p in problems:
         print("FAIL", p)
     print(f"scanned {files} files: {len(problems)} problem(s)")

@@ -70,35 +70,40 @@ A common technical interview goes like this: the interviewer drops a link to som
 
 ## Modules
 
-Modules are tagged **SOC Tier 1**, **SOC Tier 2 / IR**, or both.
+All 15 concepts ship. Each module is tagged **SOC Tier 1**, **SOC Tier 2 / IR**, or both.
 
 | # | Module | Track |
 |---|---|---|
 | 01 | PowerShell -EncodedCommand | Tier 1, Tier 2 / IR |
 | 02 | Obfuscated download cradle | Tier 1, Tier 2 / IR |
 | 03 | Single-byte XOR config | Tier 2 / IR |
+| 04 | Authentication anomaly | Tier 1, Tier 2 / IR |
 | 05 | Mark-of-the-Web | Tier 1, Tier 2 / IR |
+| 06 | DNS tunneling | Tier 1, Tier 2 / IR |
 | 07 | Phishing header analysis | Tier 1, Tier 2 / IR |
+| 08 | Process-creation telemetry (Sysmon 1 vs 4688) | Tier 1, Tier 2 / IR |
+| 09 | Discovery burst (ATT&CK TA0007) | Tier 1, Tier 2 / IR |
+| 10 | Process injection | Tier 2 / IR |
 | 11 | Containment while preserving evidence | Tier 2 / IR |
+| 12 | Persistence beyond Run keys | Tier 2 / IR |
+| 13 | DLL side-loading hunt (24-host fleet) | Tier 2 / IR |
+| 14 | Device-code phishing (Entra ID) | Tier 1, Tier 2 / IR |
 | 15 | Collection order | Tier 2 / IR |
 
-**Coming next:**
-- 04 Authentication anomaly
-- 06 DNS tunneling
-- 08 Process-creation telemetry
-- 09 Discovery burst
-- 10 Process injection
-- 12 Persistence beyond Run keys
-- 13 DLL side-loading hunt
-- 14 Device-code phishing
+The Interview-mode case file ties them into one incident:
 
-The case file ties the shipped modules into one incident on one host:
+phishing email → Mark-of-the-Web download → encoded PowerShell → obfuscated cradle → XOR-protected config → discovery → planted persistence → DNS tunneling out.
 
-phishing email → Mark-of-the-Web-tagged download → encoded PowerShell → obfuscated cradle → XOR-protected config → containment decision.
+On the same day, a service account is compromised and the user falls for a device-code phish, and the case ends with the containment decision.
 
 ## Working with your own tools
 
-Every evidence panel has a **Download evidence bundle** button. The zip holds the evidence laid out like a triage collection (per-host folders with `email/`, `logs/` and `files/`), plus a `manifest.json` with SHA-256 hashes. Use whatever you would use on the job: CyberChef (the site serves an offline copy), Python, `jq`, `xmllint` or a text editor.
+Every evidence panel has a **Download evidence bundle** button. The zip holds the evidence laid out like a triage collection, plus a `manifest.json` with SHA-256 hashes:
+
+- per-host folders with `email/`, `logs/`, `files/` and `live-response/`;
+- `sensors/` for network logs;
+- `tenant/` for identity logs;
+- `fleet/` for fleet-wide telemetry. Use whatever you would use on the job: CyberChef (the site serves an offline copy), Python, `jq`, `xmllint` or a text editor.
 
 ## Run it locally or offline
 

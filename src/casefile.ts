@@ -1,5 +1,10 @@
 import { evidenceFor } from './evidence';
-import { normDomain, normIp, normUrl, normUser } from './lib/normalize';
+import { normDomain, normIp, normText, normUrl, normUser } from './lib/normalize';
+import { authScenario } from './modules/m04';
+import { dnsScenario } from './modules/m06';
+import { discoveryScenario } from './modules/m09';
+import { persistenceScenario } from './modules/m12';
+import { deviceCodeScenario } from './modules/m14';
 import { asText, shuffled } from './modules/helpers';
 import { ISOLATION_OPTIONS, isolationAnswer } from './modules/m11';
 import type { ModuleInstance } from './types';
@@ -18,7 +23,9 @@ export const CASE_RUBRIC: string[] = [
   'Normalized the obfuscated IP and explained the notation.',
   'Recovered the XOR key with a known-plaintext crib and read the whole config.',
   'Listed indicators to hunt fleet-wide: domains, IP, file names, paths, the sender.',
-  'Proposed containment that preserves evidence: keep it on, memory first.',
+  'Followed the intruder after the payload: discovery commands, the planted persistence, and DNS tunneling out.',
+  'Connected the parallel identity activity: the service-account login and the device-code phish against the same user.',
+  'Proposed containment that preserves evidence: keep it on, memory first, and revoke the user\'s cloud tokens.',
   'Said what you would do next and what you were still unsure about.',
 ];
 
@@ -48,9 +55,19 @@ export function buildCaseFile(w: World): ModuleInstance {
   ];
   const execTime = w.t.executed;
   const p = ev.paths;
+  const disc = discoveryScenario(w);
+  const pers = persistenceScenario(w);
+  const dns = dnsScenario(w);
+  const auth = authScenario(w);
+  const dc = deviceCodeScenario(w);
   return {
     artifacts: [
       ...[p.caseBrief, p.eml, p.zone, p.sysmonXml, p.sysmonJsonl, p.script, p.config].map((path) => ev.artifacts.find((a) => a.path === path)!),
+      { path: `${w.host.name}/live-response/edr-process-events.txt`, content: disc.text, title: 'EDR process events (one minute, one host)' },
+      ...pers.artifacts,
+      { path: 'sensors/zeek/dns.log', content: dns.text, title: 'Zeek dns.log excerpt' },
+      { path: 'tenant/sso-gateway.log', content: auth.text, title: 'SSO / VPN gateway authentication log' },
+      { path: 'tenant/entra-signins.json', content: dc.text, title: 'Entra ID sign-in logs (interactive and non-interactive)' },
       ev.artifacts.find((a) => a.path === p.containmentBrief)!,
     ],
     questions: [
@@ -72,6 +89,10 @@ export function buildCaseFile(w: World): ModuleInstance {
       { id: 'filehost', prompt: 'Which domain served the payload?', kind: 'text', placeholder: 'domain', why: 'HostUrl in the Zone.Identifier stream.' },
       { id: 'ip', prompt: 'What is the stage-2 host as a dotted-quad IPv4 address?', kind: 'text', placeholder: 'a.b.c.d', why: 'The obfuscated host in the downloaded script, normalized.' },
       { id: 'c2', prompt: 'What is the C2 URL?', kind: 'text', placeholder: 'https://…', why: 'The c2 field in settings.dat once the XOR key is removed.' },
+      { id: 'persist', prompt: 'What is the name of the persistence the intruder planted (task, service or WMI consumer)?', kind: 'text', placeholder: 'name', why: 'The only task, service or WMI consumer running a hidden PowerShell script from ProgramData, created minutes after the compromise.' },
+      { id: 'exfil', prompt: 'Which domain is the host tunneling data to over DNS?', kind: 'text', placeholder: 'domain', why: 'TXT queries with unique random labels under one parent domain, all from the patient-zero host.' },
+      { id: 'svc', prompt: 'Which service account was compromised the same day?', kind: 'text', placeholder: 'account', why: 'The service account that succeeds from an external IP without MFA right after failures.' },
+      { id: 'cloudip', prompt: 'From which IP did the attacker use the user\'s stolen cloud tokens?', kind: 'text', placeholder: 'a.b.c.d', why: 'Non-interactive sign-ins right after the device-code sign-in, same session, new IP and country.' },
       {
         id: 'contain',
         prompt: 'Using the containment scenario, how do you isolate the affected host?',
@@ -87,6 +108,10 @@ export function buildCaseFile(w: World): ModuleInstance {
       filehost: w.attacker.fileHostDomain,
       ip: w.attacker.stage2Ip,
       c2: w.attacker.c2Url,
+      persist: pers.name,
+      exfil: dns.tunnel,
+      svc: auth.svcBad,
+      cloudip: dc.attackerIp,
       contain: isolationAnswer(w),
     },
     check(qid, a) {
@@ -106,6 +131,14 @@ export function buildCaseFile(w: World): ModuleInstance {
           return normIp(t) === w.attacker.stage2Ip;
         case 'c2':
           return normUrl(t) === normUrl(w.attacker.c2Url);
+        case 'persist':
+          return normText(t).replace(/^\\+/, '') === pers.name.toLowerCase();
+        case 'exfil':
+          return normDomain(t) === dns.tunnel;
+        case 'svc':
+          return normUser(t) === auth.svcBad;
+        case 'cloudip':
+          return normIp(t) === dc.attackerIp;
         case 'contain':
           return t === isolationAnswer(w);
       }
@@ -118,7 +151,7 @@ export function aiGradingPrompt(w: World, notes: string, answers: Record<string,
   return [
     'You are a senior SOC / incident response interviewer. Grade my walkthrough of a practice case honestly. Be specific and do not flatter me.',
     '',
-    'The case: a user received a phishing email spoofing their own company\'s Accounts Payable address (DMARC fail, p=none, look-alike Reply-To). The link led to a download of invoice.pdf.exe (Mark-of-the-Web ZoneId=3; HostUrl differs from ReferrerUrl). Running it launched PowerShell with a UTF-16LE Base64 -EncodedCommand that downloaded a script to TEMP. That script used an irm | iex cradle to a host written in obfuscated IPv4 notation. A single-byte XOR-encoded config with a C2 URL was then written to ProgramData. The final question was how to contain the host while preserving evidence.',
+    'The case: a user received a phishing email spoofing their own company\'s Accounts Payable address (DMARC fail, p=none, look-alike Reply-To). The link led to a download of invoice.pdf.exe (Mark-of-the-Web ZoneId=3; HostUrl differs from ReferrerUrl). Running it launched PowerShell with a UTF-16LE Base64 -EncodedCommand that downloaded a script to TEMP. That script used an irm | iex cradle to a host written in obfuscated IPv4 notation. A single-byte XOR-encoded config with a C2 URL was then written to ProgramData. The intruder then ran discovery commands, planted persistence (a scheduled task, service or WMI subscription) and tunneled data out over DNS. The same day, a service account was compromised from an external IP without MFA, and the user fell for a device-code phish that gave the attacker cloud tokens. The final question was how to contain the host while preserving evidence.',
     '',
     'What a strong answer covers:',
     ...CASE_RUBRIC.map((r) => `- ${r}`),

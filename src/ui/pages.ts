@@ -74,7 +74,9 @@ export function homePage(nav: Nav): HTMLElement {
       ),
     ),
     h('section', { id: 'modules' }, h('div', { class: 'section-head' }, h('h2', {}, 'Modules'), filter), list),
-    h(
+    PLANNED.length === 0
+      ? null
+      : h(
       'section',
       { class: 'roadmap' },
       h('h2', {}, 'Coming next'),

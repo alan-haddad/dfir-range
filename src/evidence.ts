@@ -34,6 +34,10 @@ export interface Evidence {
     configPlain: string;
     payloadPath: string;
     encodedPid: number;
+    /** Process records shared with modules that render other log sources for the same activity. */
+    procs: { explorer: Proc; payload: Proc; psEnc: Proc; psFile: Proc };
+    times: { payload: Date; psEnc: Date; psFile: Date };
+    logonId: string;
   };
 }
 
@@ -225,7 +229,7 @@ function sysmonJsonl(events: SysmonEvent[], w: World, firstRecord: number): stri
   );
 }
 
-interface Proc {
+export interface Proc {
   guid: string;
   pid: number;
   image: string;
@@ -302,9 +306,11 @@ function caseBrief(w: World): string {
     `**Assigned to:** ${w.victim.display}, ${w.victim.title}, ${w.victim.dept}`,
     `**Alert time (UTC):** ${sysmonUtc(w.t.detected).slice(0, 19)}`,
     ``,
-    `You're the analyst on shift. A triage collection from the host is attached:`,
-    `the user's mailbox export, the Sysmon log, and files of interest. Work out what`,
-    `happened, how it started, what infrastructure is involved, and what you'd do next.`,
+    `You're the analyst on shift. A triage collection is attached: the user's mailbox export,`,
+    `host logs and files of interest, EDR process events, DNS logs from the network sensor,`,
+    `and the identity logs (SSO gateway and Entra ID sign-ins) for the same day. Work out what`,
+    `happened, how it started, what the intruder did next, what infrastructure is involved,`,
+    `and what you'd do next.`,
     ``,
   ].join('\n');
 }
@@ -417,15 +423,18 @@ export function buildEvidence(w: World): Evidence {
   // Real events carry sub-second timestamps; add milliseconds so UtcTime looks like a live log.
   const ms = (d: Date) => new Date(d.getTime() + rng.int(0, 999));
   const s = (base: Date, off: number) => ms(ADDR.addSeconds(base, off));
+  const tPayload = ms(w.t.executed);
+  const tPsEnc = ms(w.t.stage1);
+  const tPsFile = s(w.t.stage1, 2);
   const events: SysmonEvent[] = [
     procCreate(s(w.t.emailReceived, -rng.int(900, 1500)), itPs, svchost, guid(rng), '0x3e7', rng),
     procCreate(s(w.t.emailReceived, -rng.int(300, 800)), conhost, itPs, guid(rng), '0x3e7', rng),
     procCreate(s(w.t.clicked, -rng.int(60, 170)), notepad, explorer, logonGuid, logonId, rng),
     procCreate(s(w.t.clicked, rng.int(1, 6)), taskhost, services, logonGuid, logonId, rng),
-    procCreate(ms(w.t.executed), payload, explorer, logonGuid, logonId, rng),
-    procCreate(ms(w.t.stage1), psEnc, payload, logonGuid, logonId, rng),
+    procCreate(tPayload, payload, explorer, logonGuid, logonId, rng),
+    procCreate(tPsEnc, psEnc, payload, logonGuid, logonId, rng),
     fileCreate(s(w.t.stage1, 1), psEnc, scriptPath),
-    procCreate(s(w.t.stage1, 2), psFile, psEnc, logonGuid, logonId, rng),
+    procCreate(tPsFile, psFile, psEnc, logonGuid, logonId, rng),
     fileCreate(ms(w.t.configWritten), psFile, configPath),
     procCreate(s(w.t.configWritten, rng.int(30, 200)), mk('C:\\Windows\\System32\\svchost.exe', 'C:\\Windows\\system32\\svchost.exe -k UnistackSvcGroup', userDom, 'Medium', 'C:\\Windows\\system32\\', meta('Host Process for Windows Services', 'svchost.exe')), services, logonGuid, logonId, rng),
   ];
@@ -498,6 +507,9 @@ export function buildEvidence(w: World): Evidence {
       configPlain: cfgPlain,
       payloadPath,
       encodedPid: psEnc.pid,
+      procs: { explorer, payload, psEnc, psFile },
+      times: { payload: tPayload, psEnc: tPsEnc, psFile: tPsFile },
+      logonId,
     },
   };
 }

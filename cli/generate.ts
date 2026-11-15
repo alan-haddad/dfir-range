@@ -9,6 +9,7 @@ import { artifactBytes, buildZip, manifest } from '../src/bundle';
 import { buildCaseFile } from '../src/casefile';
 import { evidenceFor } from '../src/evidence';
 import { MODULES } from '../src/modules';
+import type { Artifact } from '../src/types';
 import { buildWorld } from '../src/world';
 
 function arg(name: string): string | undefined {
@@ -24,15 +25,19 @@ if (!seed || !out) {
 }
 
 const w = buildWorld(seed);
-const ev = evidenceFor(w);
+evidenceFor(w);
 
-for (const a of ev.artifacts) {
+const instances = Object.fromEntries([...MODULES.map((m) => [m.id, m.build(w)] as const), ['case', buildCaseFile(w)] as const]);
+
+// Every artifact any module uses, de-duplicated by path.
+const all = new Map<string, Artifact>();
+for (const inst of Object.values(instances)) for (const a of inst.artifacts) all.set(a.path, a);
+const artifacts = [...all.values()].sort((a, b) => a.path.localeCompare(b.path));
+for (const a of artifacts) {
   const p = join(out, a.path);
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, artifactBytes(a));
 }
-
-const instances = Object.fromEntries([...MODULES.map((m) => [m.id, m.build(w)] as const), ['case', buildCaseFile(w)] as const]);
 
 const questions = Object.fromEntries(
   Object.entries(instances).map(([id, inst]) => [
@@ -52,8 +57,8 @@ if (expectedPath) {
 }
 
 const main = async () => {
-  writeFileSync(join(out, 'manifest.json'), await manifest(ev.artifacts, seed));
-  if (process.argv.includes('--zip')) writeFileSync(`${out}.zip`, await buildZip(ev.artifacts, seed));
-  console.log(`seed ${seed}: wrote ${ev.artifacts.length} artifacts to ${out}`);
+  writeFileSync(join(out, 'manifest.json'), await manifest(artifacts, seed));
+  if (process.argv.includes('--zip')) writeFileSync(`${out}.zip`, await buildZip(artifacts, seed));
+  console.log(`seed ${seed}: wrote ${artifacts.length} artifacts to ${out}`);
 };
 main();
