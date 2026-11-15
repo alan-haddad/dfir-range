@@ -134,3 +134,49 @@ describe('drills', () => {
     }
   });
 });
+
+describe('assessment', () => {
+  it('builds 15 items, one per concept, that accept their own answers', async () => {
+    const { buildAssessment } = await import('../src/assessment');
+    for (const s of SEEDS.slice(0, 30)) {
+      const items = buildAssessment(buildWorld(s));
+      expect(items).toHaveLength(15);
+      expect(new Set(items.map((i) => i.concept)).size).toBe(15);
+      for (const it of items) {
+        const ans = it.kind === 'text' ? it.expected : it.kind === 'order' ? ['memory', 'live', 'triage'] : it.options!.find((o) => o.label === it.expected)!.id;
+        expect(it.check(ans), `${it.concept} seed ${s}`).toBe(true);
+        expect(it.check(it.kind === 'order' ? ['disk', 'mail', 'netlogs'] : 'zzz-wrong'), `${it.concept} wrong`).toBe(false);
+      }
+    }
+  });
+});
+
+describe('weak spots', () => {
+  it('classifies confidence and correctness', async () => {
+    const { classify } = await import('../src/ui/weakness');
+    expect(classify(true, 'sure')).toBe('strength');
+    expect(classify(true, 'guess')).toBe('lucky');
+    expect(classify(false, 'sure')).toBe('misconception');
+    expect(classify(false, 'guess')).toBe('gap');
+    expect(classify(false, 'idk')).toBe('gap');
+  });
+
+  it('counts only first tries and ranks misconceptions first', async () => {
+    const { report } = await import('../src/ui/weakness');
+    const r = (concept: string, qid: string, correct: boolean, confidence: 'sure' | 'guess' | 'idk', at: number) => ({ concept, qid, seed: 's', source: 'learn' as const, correct, confidence, at });
+    const rep = report(
+      [
+        r('m01', 'url', false, 'sure', 1),
+        r('m01', 'url', true, 'sure', 2), // retry: must not hide the misconception
+        r('m02', 'ip', true, 'sure', 3),
+        r('m03', 'key', true, 'guess', 4),
+      ],
+      ['m01', 'm02', 'm03', 'm04'],
+    );
+    expect(rep[0].concept).toBe('m01');
+    expect(rep[0].status).toBe('misconception');
+    expect(rep.find((x) => x.concept === 'm02')!.status).toBe('strength');
+    expect(rep.find((x) => x.concept === 'm03')!.status).toBe('lucky');
+    expect(rep.find((x) => x.concept === 'm04')!.status).toBe('untested');
+  });
+});

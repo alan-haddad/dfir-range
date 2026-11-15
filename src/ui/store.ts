@@ -8,15 +8,33 @@ export interface Attempt {
   at: number;
 }
 
+export type Confidence = 'sure' | 'guess' | 'idk';
+export type Source = 'learn' | 'assessment' | 'case';
+
+/** One graded answer, with how confident the person was. Used for the weak-spots report. */
+export interface ResultRecord {
+  concept: string; // module id, e.g. "m07"
+  qid: string;
+  seed: string;
+  source: Source;
+  correct: boolean;
+  confidence: Confidence;
+  at: number;
+}
+
 export interface State {
   attempts: Record<string, Record<string, Record<string, Attempt>>>; // module -> seed -> question -> attempt
   explain: Record<string, string>; // module -> notes
+  records: ResultRecord[];
+  findOut: Record<string, string>; // "how would you find out" notes, keyed by concept:qid
   drillBest: number;
   hints: boolean;
   track: 'all' | 't1' | 't2';
 }
 
-const DEFAULT: State = { attempts: {}, explain: {}, drillBest: 0, hints: true, track: 'all' };
+const MAX_RECORDS = 3000;
+
+const DEFAULT: State = { attempts: {}, explain: {}, records: [], findOut: {}, drillBest: 0, hints: true, track: 'all' };
 
 let memory: State | null = null;
 
@@ -56,6 +74,14 @@ export function recordAttempt(moduleId: string, seed: string, qid: string, corre
   });
 }
 
+export function recordResult(r: Omit<ResultRecord, 'at'>): void {
+  update((s) => {
+    s.records ??= [];
+    s.records.push({ ...r, at: Date.now() });
+    if (s.records.length > MAX_RECORDS) s.records.splice(0, s.records.length - MAX_RECORDS);
+  });
+}
+
 export function hasAttempted(moduleId: string): boolean {
   const m = load().attempts[moduleId];
   return !!m && Object.keys(m).length > 0;
@@ -74,7 +100,7 @@ export function importProgress(json: string): boolean {
   try {
     const parsed = JSON.parse(json);
     if (typeof parsed !== 'object' || parsed === null || typeof parsed.attempts !== 'object') return false;
-    save({ ...DEFAULT, ...parsed });
+    save({ ...DEFAULT, ...parsed, records: Array.isArray(parsed.records) ? parsed.records : [] });
     return true;
   } catch {
     return false;

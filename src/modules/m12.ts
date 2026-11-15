@@ -134,7 +134,13 @@ export function persistenceScenario(w: World) {
     // Task files on disk are UTF-16LE with a byte-order mark, as Windows writes them.
     ...tasks.map((t) => ({ path: `${H}/files/Windows/System32/Tasks${t.name.replace(/\\/g, '/')}`, content: new Uint8Array([0xff, 0xfe, ...utf16leBytes(t.xml)]), view: t.xml, title: `Task file: ${t.name}`, note: 'Stored as UTF-16LE, like the real files in System32\\Tasks.' })),
   ];
-  return { kind, name, artifacts };
+  // A compact, autoruns-style listing of every persistence item, used by Assessment mode.
+  const items = [
+    ...tasks.map((t) => ({ type: 'Scheduled task', name: t.name.replace(/^\\/, ''), command: /<Command>([^<]*)<\/Command>/.exec(t.xml)![1] + ' ' + /<Arguments>([^<]*)<\/Arguments>/.exec(t.xml)![1].replace(/&amp;/g, '&') })),
+    ...services.map((s) => ({ type: 'Service', name: s.name, command: s.path })),
+    ...[{ name: 'VelmoraIT_InventoryConsumer', command: 'powershell.exe -NoProfile -NonInteractive -File C:\\ProgramData\\VelmoraIT\\inventory.ps1' }, ...(kind === 'wmi' ? [{ name: badWmi, command: payloadCmd }] : [])].map((x) => ({ type: 'WMI consumer', ...x })),
+  ];
+  return { kind, name, artifacts, items: rng.shuffle(items) };
 }
 
 export const m12: ModuleDef = {

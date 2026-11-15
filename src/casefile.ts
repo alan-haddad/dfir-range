@@ -12,6 +12,21 @@ import type { World } from './world';
 
 // Interview mode: one case file that stitches the v1 modules into a single incident.
 
+/** Which concept (module) each case-file question exercises, for the weak-spots report. */
+export const CASE_CONCEPT: Record<string, string> = {
+  user: 'm08',
+  time: 'm08',
+  vector: 'm05',
+  filehost: 'm05',
+  ip: 'm02',
+  c2: 'm03',
+  persist: 'm12',
+  exfil: 'm06',
+  svc: 'm04',
+  cloudip: 'm14',
+  contain: 'm11',
+};
+
 export const CASE_PROMPT = 'Go through this and walk me through your thought process.';
 
 export const CASE_RUBRIC: string[] = [

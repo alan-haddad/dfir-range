@@ -1,7 +1,8 @@
 import { buildZip, artifactBytes } from '../bundle';
 import type { Answer, Artifact, ModuleInstance, Question } from '../types';
 import { copyText, download, h, md, p } from './dom';
-import { recordAttempt } from './store';
+import { load, recordAttempt, recordResult, update, type Source } from './store';
+import { classify, OUTCOME_TEXT, type Outcome } from './weakness';
 import { randomSeed } from '../lib/prng';
 
 export function seedBar(seed: string, onNew: (seed: string) => void): HTMLElement {
@@ -95,19 +96,85 @@ function answerInput(q: Question): { el: HTMLElement; read: () => Answer | null 
   return { el: input, read: () => (input.value.trim() ? input.value.trim() : null) };
 }
 
-/** Renders the questions; calls onAttempt after every check so callers can unlock debriefs. */
-export function questionList(inst: ModuleInstance, moduleId: string, seed: string, onAttempt: () => void): HTMLElement {
+export interface QuestionListOptions {
+  /** Module id used for debrief unlocking ("case" for the case file). */
+  moduleId: string;
+  seed: string;
+  source: Source;
+  /** Which concept (module id) a question belongs to, for the weak-spots report. */
+  concept: (qid: string) => string;
+  /** Text shown after "I don't know": one way to find the answer. */
+  findOutHint?: (qid: string) => string | undefined;
+  onAttempt: () => void;
+}
+
+/** Sure / Guessing toggle. Returns a reader for the current choice. */
+export function confidenceToggle(): { el: HTMLElement; read: () => 'sure' | 'guess' | null; reset: () => void } {
+  const name = `c-${Math.random().toString(36).slice(2, 8)}`;
+  const sure = h('input', { type: 'radio', name, value: 'sure' });
+  const guess = h('input', { type: 'radio', name, value: 'guess' });
+  return {
+    el: h(
+      'div',
+      { class: 'confidence', role: 'radiogroup', 'aria-label': 'How confident are you?' },
+      h('span', { class: 'muted small' }, 'How sure are you?'),
+      h('label', { class: 'pill-choice' }, sure, h('span', {}, 'Sure')),
+      h('label', { class: 'pill-choice' }, guess, h('span', {}, 'Guessing')),
+    ),
+    read: () => (sure.checked ? 'sure' : guess.checked ? 'guess' : null),
+    reset: () => {
+      sure.checked = false;
+      guess.checked = false;
+    },
+  };
+}
+
+function expectedText(inst: ModuleInstance, q: Question): string {
+  const exp = inst.expected[q.id];
+  const label = (id: string) => q.options?.find((o) => o.id === id)?.label ?? id;
+  if (Array.isArray(exp)) return exp.map(label).join(' → ');
+  return q.kind === 'choice' ? label(exp) : exp;
+}
+
+export function outcomeBadge(o: Outcome): HTMLElement {
+  return h('span', { class: `outcome ${o}` }, OUTCOME_TEXT[o].label);
+}
+
+/** "How would you find out?" prompt shown after "I don't know", saved locally. */
+export function findOutBox(key: string, hint?: string): HTMLElement {
+  const ta = h('textarea', { rows: '3', placeholder: 'In an interview, "I don\'t know, but here is how I would find out" is a strong answer. How would you find out?' });
+  ta.value = load().findOut?.[key] ?? '';
+  ta.addEventListener('input', () => update((s) => { s.findOut ??= {}; s.findOut[key] = ta.value; }));
+  const box = h('div', { class: 'find-out' }, ta);
+  if (hint) {
+    const d = h('details', {}, h('summary', {}, 'One way to find out'));
+    d.append(p(hint));
+    box.append(d);
+  }
+  return box;
+}
+
+/**
+ * Renders the questions with a confidence toggle and an "I don't know" button.
+ * The first answer to each question is what the weak-spots report counts.
+ */
+export function questionList(inst: ModuleInstance, o: QuestionListOptions): HTMLElement {
   const wrap = h('ol', { class: 'questions' });
   for (const q of inst.questions) {
     const { el, read } = answerInput(q);
+    const conf = confidenceToggle();
     const feedback = h('div', { class: 'feedback', 'aria-live': 'polite' });
     const btn = h('button', { class: 'btn', type: 'button' }, 'Check');
+    const idk = h('button', { class: 'btn ghost', type: 'button' }, 'I don\'t know');
+    const concept = o.concept(q.id);
+    let gaveUp = false;
+
     btn.addEventListener('click', () => {
       const a = read();
       feedback.replaceChildren();
       if (a === null) {
         feedback.className = 'feedback error';
-        feedback.textContent = q.kind === 'order' ? 'Fill every slot first.' : 'Enter an answer first.';
+        feedback.textContent = q.kind === 'order' ? 'Fill every slot first.' : 'Enter an answer first, or choose "I don\'t know".';
         return;
       }
       if (q.kind === 'order' && new Set(a as string[]).size !== (a as string[]).length) {
@@ -115,18 +182,44 @@ export function questionList(inst: ModuleInstance, moduleId: string, seed: strin
         feedback.textContent = 'Use each item only once.';
         return;
       }
+      const confidence = conf.read();
+      if (!confidence) {
+        feedback.className = 'feedback error';
+        feedback.textContent = 'Pick Sure or Guessing first. It is how your weak spots get found.';
+        return;
+      }
       const ok = inst.check(q.id, a);
-      recordAttempt(moduleId, seed, q.id, ok);
+      recordAttempt(o.moduleId, o.seed, q.id, ok);
+      recordResult({ concept, qid: q.id, seed: o.seed, source: o.source, correct: ok, confidence });
+      const outcome = classify(ok, confidence);
       feedback.className = ok ? 'feedback ok' : 'feedback bad';
-      feedback.append(h('strong', {}, ok ? 'Correct. ' : 'Not quite. '));
-      if (ok) feedback.append(md(q.why));
-      else feedback.append('Re-check the evidence and try again, or open a hint. The full answer appears in the debrief after any attempt.');
-      onAttempt();
+      feedback.append(outcomeBadge(outcome), ' ', h('strong', {}, ok ? 'Correct. ' : 'Not quite. '));
+      if (ok) {
+        feedback.append(md(q.why));
+        if (outcome === 'lucky') feedback.append(h('div', { class: 'muted small' }, OUTCOME_TEXT.lucky.note));
+      } else {
+        feedback.append(gaveUp ? 'Try again with what you learned.' : 'Re-check the evidence and try again, or open a hint. The full answer appears in the debrief.');
+        if (outcome === 'misconception') feedback.append(h('div', { class: 'muted small' }, OUTCOME_TEXT.misconception.note));
+      }
+      conf.reset();
+      o.onAttempt();
     });
+
+    idk.addEventListener('click', () => {
+      gaveUp = true;
+      recordAttempt(o.moduleId, o.seed, q.id, false);
+      recordResult({ concept, qid: q.id, seed: o.seed, source: o.source, correct: false, confidence: 'idk' });
+      feedback.className = 'feedback gap';
+      feedback.replaceChildren(outcomeBadge('gap'), ' ', h('strong', {}, 'Answer: '), h('code', {}, expectedText(inst, q)), ' ');
+      feedback.append(md(q.why));
+      feedback.append(findOutBox(`${concept}:${q.id}`, o.findOutHint?.(q.id)));
+      o.onAttempt();
+    });
+
     if (el instanceof HTMLInputElement) el.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
     const prompt = h('div', { class: 'q-prompt' });
     prompt.append(md(q.prompt));
-    wrap.append(h('li', { class: 'question' }, prompt, h('div', { class: 'q-row' }, el, btn), feedback));
+    wrap.append(h('li', { class: 'question' }, prompt, el, h('div', { class: 'q-row' }, conf.el, btn, idk), feedback));
   }
   return wrap;
 }

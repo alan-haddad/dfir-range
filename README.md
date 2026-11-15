@@ -16,7 +16,8 @@ A common technical interview goes like this: the interviewer drops a link to som
 
 - [Quick start](#quick-start)
 - [Troubleshooting](#troubleshooting)
-- [The three modes](#the-three-modes)
+- [The modes](#the-modes)
+- [Finding your weak spots](#finding-your-weak-spots)
 - [Modules](#modules)
 - [Working with your own tools](#working-with-your-own-tools)
 - [Run it locally or offline](#run-it-locally-or-offline)
@@ -28,9 +29,10 @@ A common technical interview goes like this: the interviewer drops a link to som
 ## Quick start
 
 1. Open the site.
-2. **New to this?** Start with Learn: Module 01, then 05, then 07. Each one teaches one concept.
-3. **Interview next week?** Go straight to **Interview mode**, set a 20-minute timer, and talk through the case out loud. Then answer the structured questions and grade yourself against the rubric.
-4. **Five spare minutes?** Do **Drills**: fast recognition reps you can do on a phone.
+2. **Get a baseline.** Take an **Assessment**: 15 short questions in the format of a real skills assessment. Say how sure you are on each answer, or tick "I don't know". The results rank your weak spots.
+3. **Work the weak spots.** Each one links to its **Learn** module, which teaches the concept with background, evidence, hints and a debrief, plus a retest with a fresh scenario.
+4. **Interview next week?** Do **Interview mode**: set a 20-minute timer and talk through the full case out loud, then answer the structured questions and grade yourself against the rubric.
+5. **Five spare minutes?** Do **Drills**: fast recognition reps you can do on a phone.
 
 ## Troubleshooting
 
@@ -42,7 +44,9 @@ A common technical interview goes like this: the interviewer drops a link to som
 | The page is blank | The site needs JavaScript. Everything runs locally; nothing is sent anywhere. |
 | A downloaded `.ps1.txt` or zip is flagged by antivirus | The content is inert text. The script is deliberately saved with a `.txt` extension, but some scanners flag PowerShell download patterns in any file. Allow it for this folder or work in the browser instead. |
 
-## The three modes
+## The modes
+
+**Assessment.** The format of a real skills assessment: 15 short questions on one page, each with a small inline snippet, and "talk through your reasoning" prompts. Answers are mostly free text, so they can't be guessed from a list. Every seed generates fresh values.
 
 **Interview mode.** One case file and one prompt: *"Go through this and walk me through your thought process."*
 - **Phase 1:** talk through it out loud. There's an optional timer and an optional local recording, so you can hear yourself.
@@ -67,6 +71,20 @@ A common technical interview goes like this: the interviewer drops a link to som
 - SPF vs DMARC;
 - order of volatility;
 - double extensions.
+
+## Finding your weak spots
+
+Guessing hides weaknesses, so every question asks for an answer **and** how sure you are (Sure or Guessing), or lets you say **I don't know**. The first answer to each question is classified:
+
+| | Sure | Guessing |
+|---|---|---|
+| **Correct** | Strength | Lucky guess (counts as a weak spot) |
+| **Wrong** | **Misconception: fix first** | Gap |
+| **I don't know** | | Gap |
+
+The **Weak spots** page ranks all 15 concepts by priority, using your first answers across the Assessment, Learn and Interview modes, and links each to its module and a retest. Retrying after feedback doesn't hide a weakness, because only first answers count.
+
+"I don't know" shows you the answer and asks *how would you find out?* In an interview, "I don't know, but here's how I'd find out" is a strong answer, so it's worth practicing.
 
 ## Modules
 

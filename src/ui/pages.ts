@@ -1,4 +1,4 @@
-import { aiGradingPrompt, buildCaseFile, CASE_FOLLOWUPS, CASE_PROMPT, CASE_RUBRIC } from '../casefile';
+import { aiGradingPrompt, buildCaseFile, CASE_CONCEPT, CASE_FOLLOWUPS, CASE_PROMPT, CASE_RUBRIC } from '../casefile';
 import { DRILLS, type DrillItem } from '../drills';
 import { Rng, randomSeed } from '../lib/prng';
 import { MODULES, PLANNED, moduleById } from '../modules';
@@ -64,10 +64,11 @@ export function homePage(nav: Nav): HTMLElement {
       { class: 'hero' },
       h('p', { class: 'eyebrow' }, 'Free · runs in your browser · nothing leaves your machine'),
       h('h1', {}, 'Practice the SOC and incident-response interview.'),
-      p('Interviewers drop a link to some evidence and say *"walk me through your thought process."* This range gives you that, with realistic synthetic evidence that changes with every seed, plus debriefs on what a strong answer sounds like.'),
+      p('Interviewers drop a link to some evidence and say *"walk me through your thought process."* This range gives you that, with realistic synthetic evidence that changes with every seed, plus debriefs on what a strong answer sounds like. It also tracks how sure you were, so lucky guesses and confident mistakes show up as [weak spots](#/progress) instead of hiding.'),
       h(
         'div',
         { class: 'mode-cards' },
+        modeCard('Assessment', 'Fifteen short questions on one page, in the format of a real skills assessment. Say how sure you are, or "I don\'t know", and get a ranked list of weak spots.', 'Take an assessment', () => nav('#/assessment')),
         modeCard('Interview mode', 'One case file and one prompt: walk through it out loud, then answer the structured questions and grade yourself against the rubric.', 'Start a case', () => nav('#/interview')),
         modeCard('Learn', 'One concept per module: background on why each step matters, the evidence, tiered hints, questions and a debrief.', 'Browse modules', () => document.getElementById('modules')?.scrollIntoView({ behavior: 'smooth' })),
         modeCard('Drills', 'Thirty-second recognition reps: spot UTF-16LE Base64, normalize IPs, XOR cribs, event IDs, order of volatility.', 'Start drilling', () => nav('#/drills')),
@@ -150,7 +151,13 @@ export function learnPage(id: string, seed: string, nav: Nav): HTMLElement {
       ? h('section', {}, h('h2', {}, 'Hints'), ...m.hints.map((t, i) => h('details', { class: 'hint' }, h('summary', {}, `Hint ${i + 1}${i === 2 ? ' (most direct)' : ''}`), p(t))))
       : null,
     h('section', {}, h('h2', {}, 'Explain it'), p(m.explainPrompt, 'muted'), notes, p('Saved in this browser only.', 'muted small')),
-    h('section', {}, h('h2', {}, 'Check your answer'), questionList(inst, m.id, seed, renderDebrief)),
+    h(
+      'section',
+      {},
+      h('h2', {}, 'Check your answer'),
+      p('Say how sure you are before checking, or choose "I don\'t know". Your first answer to each question feeds [your weak spots](#/progress).', 'muted small'),
+      questionList(inst, { moduleId: m.id, seed, source: 'learn', concept: () => m.id, findOutHint: () => m.hints[2], onAttempt: renderDebrief }),
+    ),
     debrief,
     h('nav', { class: 'pager' }, prev ? h('a', { href: `#/learn/${prev.id}` }, `← ${prev.title}`) : h('span'), next ? h('a', { href: `#/learn/${next.id}` }, `${next.title} →`) : h('a', { href: '#/interview' }, 'Try the full case file →')),
   );
@@ -343,9 +350,14 @@ export function interviewPage(seed: string, nav: Nav): HTMLElement {
           return inst.check(qid, a);
         },
       },
-      'case',
-      seed,
-      () => {},
+      {
+        moduleId: 'case',
+        seed,
+        source: 'case',
+        concept: (qid) => CASE_CONCEPT[qid] ?? 'case',
+        findOutHint: (qid) => moduleById(CASE_CONCEPT[qid] ?? '')?.hints[2],
+        onAttempt: () => {},
+      },
     );
     root.replaceChildren(
       h('a', { class: 'back', href: '#/' }, '← Home'),

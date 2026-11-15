@@ -34,11 +34,19 @@ test('learn module: correct answer is accepted and unlocks the debrief', async (
   const q1 = page.locator('.question').first();
   await q1.locator('input[type=text]').fill('https://wrong.test/x');
   await q1.getByRole('button', { name: 'Check' }).click();
-  await expect(q1.locator('.feedback')).toContainText('Not quite');
+  await expect(q1.locator('.feedback')).toContainText('Pick Sure or Guessing');
+  await q1.getByText('Sure', { exact: true }).click();
+  await q1.getByRole('button', { name: 'Check' }).click();
+  await expect(q1.locator('.feedback')).toContainText('Misconception');
 
   await q1.locator('input[type=text]').fill(String(inst.expected.url).replace('https', 'hxxps').replace(/\./g, '[.]'));
+  await q1.getByText('Sure', { exact: true }).click();
   await q1.getByRole('button', { name: 'Check' }).click();
   await expect(q1.locator('.feedback')).toContainText('Correct');
+
+  const q2 = page.locator('.question').nth(1);
+  await q2.getByRole('button', { name: "I don't know" }).click();
+  await expect(q2.locator('.feedback')).toContainText('UTF-16LE');
   await expect(page.locator('.debrief')).toContainText('What interviewers listen for');
   expect(foreign).toEqual([]);
 });
@@ -57,7 +65,9 @@ test('interview mode runs through all three phases', async ({ page }) => {
   await page.getByRole('button', { name: /done talking/ }).click();
   const q = page.locator('.question').first();
   await q.locator('input[type=text]').fill(String(inst.expected.user));
+  await q.getByText('Guessing', { exact: true }).click();
   await q.getByRole('button', { name: 'Check' }).click();
+  await expect(q.locator('.feedback')).toContainText('Lucky guess');
   await expect(q.locator('.feedback')).toContainText('Correct');
   await page.getByRole('button', { name: /Finish/ }).click();
   await expect(page.getByRole('heading', { name: /Rubric/ })).toBeVisible();
@@ -83,4 +93,29 @@ test('works offline after the first visit', async ({ page, context }) => {
   await page.reload();
   await expect(page.locator('.module-card').first()).toBeVisible();
   await context.setOffline(false);
+});
+
+test('assessment: "I don\'t know" and confidence feed the weak-spots report', async ({ page }) => {
+  const seed = 'e2eseed4';
+  const { buildAssessment } = await import('../src/assessment');
+  const items = buildAssessment(buildWorld(seed));
+  await page.goto(`./#/assessment?seed=${seed}`);
+  await expect(page.locator('.assess-item')).toHaveCount(15);
+
+  await page.getByRole('button', { name: 'Submit assessment' }).click();
+  await expect(page.locator('.feedback.error').last()).toContainText('need attention');
+
+  const first = page.locator('.assess-item').first();
+  await first.locator('input[type=text]').fill(items[0].expected);
+  await first.getByText('Sure', { exact: true }).click();
+  for (let i = 1; i < 15; i++) await page.locator('.assess-item').nth(i).locator('.toggle.idk input').check();
+  await page.getByRole('button', { name: 'Submit assessment' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Assessment results' })).toBeVisible();
+  await expect(page.locator('.score')).toContainText('1 of 15 correct');
+  await expect(page.locator('.matrix .gap .n')).toHaveText('14');
+
+  await page.getByRole('link', { name: 'See all my weak spots' }).click();
+  await expect(page.getByRole('heading', { name: 'My weak spots' })).toBeVisible();
+  await expect(page.locator('.weak').first()).toContainText('Gap');
 });

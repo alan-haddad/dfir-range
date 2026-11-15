@@ -1,6 +1,7 @@
 import './styles.css';
 import { isValidSeed, randomSeed } from './lib/prng';
 import { h } from './ui/dom';
+import { assessmentPage, progressPage } from './ui/assess';
 import { aboutPage, drillsPage, homePage, interviewPage, learnPage, notFound } from './ui/pages';
 
 const app = document.getElementById('app')!;
@@ -33,8 +34,10 @@ function header(): HTMLElement {
       'nav',
       { class: 'site-nav', 'aria-label': 'Main' },
       h('a', { href: '#/' }, 'Modules'),
+      h('a', { href: '#/assessment' }, 'Assessment'),
       h('a', { href: '#/interview' }, 'Interview'),
       h('a', { href: '#/drills' }, 'Drills'),
+      h('a', { href: '#/progress' }, 'Weak spots'),
       h('a', { href: './cyberchef/', target: '_blank', rel: 'noopener', title: 'Bundled offline copy of CyberChef' }, 'CyberChef'),
       h('a', { href: '#/about' }, 'About'),
     ),
@@ -62,7 +65,12 @@ function render(): void {
     const s = withSeed('/interview', seed);
     if (!s) return render();
     page = interviewPage(s, nav);
-  } else if (path[0] === 'drills') page = drillsPage();
+  } else if (path[0] === 'assessment') {
+    const s = withSeed('/assessment', seed);
+    if (!s) return render();
+    page = assessmentPage(s, nav);
+  } else if (path[0] === 'progress') page = progressPage();
+  else if (path[0] === 'drills') page = drillsPage();
   else if (path[0] === 'about') page = aboutPage();
   else page = notFound(nav);
   app.replaceChildren(header(), h('main', { id: 'main' }, page), footer());
