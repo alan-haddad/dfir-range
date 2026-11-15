@@ -99,7 +99,8 @@ def scan_text(path: Path, text: str) -> list:
             problems.append(f"{path}: token with a real TLD: {full}")
     lower = text.lower()
     for b in BRANDS:
-        if re.search(rf"(?<![a-z]){re.escape(b)}(?![a-z])", lower):
+        # Alphanumeric boundaries, so a name inside a random token (e.g. "9aws2") is not a match.
+        if re.search(rf"(?<![a-z0-9]){re.escape(b)}(?![a-z0-9])", lower):
             problems.append(f"{path}: real company or brand name: {b}")
     return problems
 

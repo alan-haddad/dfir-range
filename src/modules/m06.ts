@@ -29,12 +29,8 @@ export function dnsScenario(w: World) {
   const rows: string[] = [];
   let tunnelCount = 0;
   const uid = () => 'C' + rng.alnum(17);
-  const txt = (len: number) => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-    let s = '';
-    for (let i = 0; i < len; i++) s += chars[rng.int(0, 63)];
-    return s;
-  };
+  // Hex-encoded payload chunks, as many DNS tunneling tools use.
+  const txt = (len: number) => rng.hex(Math.ceil(len / 2)).slice(0, len);
   for (let i = 0; i < 90; i++) {
     ts += rng.int(80, 420) / 1000;
     const r = rng.next();
