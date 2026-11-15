@@ -4,7 +4,7 @@
 
 A common technical interview goes like this: the interviewer drops a link to some evidence and says *"go through this and walk me through your thought process."* This range lets you rehearse exactly that, with realistic synthetic evidence that changes with every seed, and debriefs that show what a strong answer sounds like.
 
-**Try it:** https://alan-haddad.github.io/dfir-range/
+**Try it:** https://alanhaddad.net/dfir-range/
 
 - Runs entirely in your browser. No account, no install, no tracking.
 - Every scenario comes from a seed in the URL, so you can repeat or share it, or roll a new one.
