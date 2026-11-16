@@ -34,7 +34,13 @@ export interface State {
 
 const MAX_RECORDS = 3000;
 
-const DEFAULT: State = { attempts: {}, explain: {}, records: [], findOut: {}, drillBest: 0, hints: true, track: 'all' };
+/**
+ * A new default state on every call. The state is mutated in place, so sharing
+ * one default object would let progress leak into it and survive a reset.
+ */
+function fresh(): State {
+  return { attempts: {}, explain: {}, records: [], findOut: {}, drillBest: 0, hints: true, track: 'all' };
+}
 
 let memory: State | null = null;
 
@@ -42,9 +48,9 @@ export function load(): State {
   if (memory) return memory;
   try {
     const raw = localStorage.getItem(KEY);
-    memory = raw ? { ...DEFAULT, ...JSON.parse(raw) } : { ...DEFAULT };
+    memory = raw ? { ...fresh(), ...JSON.parse(raw) } : fresh();
   } catch {
-    memory = { ...DEFAULT };
+    memory = fresh();
   }
   return memory!;
 }
@@ -100,7 +106,7 @@ export function importProgress(json: string): boolean {
   try {
     const parsed = JSON.parse(json);
     if (typeof parsed !== 'object' || parsed === null || typeof parsed.attempts !== 'object') return false;
-    save({ ...DEFAULT, ...parsed, records: Array.isArray(parsed.records) ? parsed.records : [] });
+    save({ ...fresh(), ...parsed, records: Array.isArray(parsed.records) ? parsed.records : [] });
     return true;
   } catch {
     return false;
@@ -108,5 +114,5 @@ export function importProgress(json: string): boolean {
 }
 
 export function resetProgress(): void {
-  save({ ...DEFAULT });
+  save(fresh());
 }
